@@ -1235,6 +1235,26 @@ function renderSettings() {
   else if (!supported) status.textContent = 'Este navegador no admite avisos. Usa «Todo al calendario» como alternativa.';
   else if (Notification.permission === 'denied') status.textContent = 'Has bloqueado las notificaciones. Actívalas en los ajustes del navegador.';
   else status.textContent = 'Recibe una notificación los días que elijas antes de cada pago.';
+  checkServer();
+}
+
+// Comprueba qué falta por configurar en Vercel para que funcionen los avisos.
+async function checkServer() {
+  const el = $('#serverStatus');
+  try {
+    const s = await (await fetch('/api/status', { cache: 'no-store' })).json();
+    const missing = [
+      !s.redis && 'la base de datos (Upstash Redis)',
+      s.redis && !s.redisOk && 'la conexión con Redis',
+      !s.vapid && 'las claves VAPID',
+      !s.cron && 'CRON_SECRET',
+    ].filter(Boolean);
+    el.className = 'hint server ' + (missing.length ? 'missing' : 'ok');
+    el.textContent = missing.length ? `Servidor: falta configurar ${missing.join(', ')}.` : 'Servidor de avisos listo.';
+  } catch {
+    el.className = 'hint server missing';
+    el.textContent = 'No encuentro el servidor de avisos. Solo funciona con la app desplegada en Vercel.';
+  }
 }
 
 // ---------- Avisos push ----------

@@ -541,6 +541,10 @@ a { color: inherit; }
 }
 .pick-icon svg { width: 23px; height: 23px; }
 .pick b { display: block; font-weight: 600; }
+.server { display: flex; gap: 8px; align-items: baseline; }
+.server::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); transform: translateY(-1px); }
+.server.ok::before { background: var(--pos); }
+.server.missing::before { background: var(--danger); }
 .av.type-av { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
 .pick small { display: block; margin-top: 1px; font-size: 14px; color: var(--muted); }
 .pick > svg { margin-left: auto; color: var(--muted); flex: none; }
