@@ -1,4 +1,4 @@
-const CACHE = 'debo-v4';
+const CACHE = 'debo-v5';
 const SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/shared.js', '/catalog.js', '/brands.js', '/vault.js', '/manifest.webmanifest',
   '/icons/icon.svg', '/icons/icon-192.png', '/icons/apple-touch-icon.png',

@@ -8,7 +8,10 @@ PWA minimalista para apuntar suscripciones, cobros y deudas, y recibir un aviso 
 - Alternativa sin servidor: exportar a calendario (`.ics`) con alarma a las 9:00 del día de aviso.
 - Responsive (móvil, tablet y escritorio con dos columnas), modo claro/oscuro/automático con transición animada, hojas que se cierran arrastrando y deshacer al eliminar.
 - Logos de ~250 servicios (Netflix, Spotify, Glovo, bancos, telefonía…) detectados por el nombre, con precio orientativo y enlace para darse de baja en los principales.
-- Pagos, «Dar de baja» y «Me deben»; pagos a plazos con cuotas y progreso; gastos compartidos; varios avisos por elemento.
+- El botón + pregunta qué quieres apuntar (suscripción, pago o recibo, a plazos, me deben, prueba gratis) y abre un formulario con solo los campos de ese tipo.
+- Tocar un elemento abre su detalle (próximo pago, progreso, historial, acciones); desde ahí se edita.
+- A plazos: escribes el total y el número de cuotas y la app calcula la cuota. También para lo que te deben en varios pagos.
+- Gastos compartidos y varios avisos por elemento.
 - Marcar como pagado con historial, pausar, archivar (con lo que te ahorras al darte de baja) y deslizar para acciones rápidas.
 - Resumen con presupuesto mensual, gasto por categoría, subidas de precio y lo gastado desde que eres cliente.
 - Vista de calendario, buscador, filtros y orden por fecha, importe o nombre.

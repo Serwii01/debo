@@ -16,12 +16,23 @@ const ACCENTS = ['#ff5a1f', '#2f6bff', '#12a150', '#8b5cf6', '#e5337a', '#e8a200
 const APPLE_SUBS = 'https://apps.apple.com/account/subscriptions';
 const GPLAY_SUBS = 'https://play.google.com/store/account/subscriptions';
 
+// Tipo para la interfaz en datos creados antes de que existieran los tipos.
+function deriveType(i) {
+  if (i.kind === 'owed') return 'owed';
+  if (i.kind === 'cancel') return 'cancel';
+  if (i.plan) return 'plan';
+  if (i.freq === 'once') return 'pay';
+  return findBrand(i.name ?? '') ? 'sub' : 'pay';
+}
+
 const migrate = i => ({
   ...i,
+  type: i.type ?? deriveType(i),
   remind: reminds(i),
   createdAt: i.createdAt ?? todayISO(),
   payments: i.payments ?? [],
   priceHistory: i.priceHistory ?? [],
+  plan: i.plan && { ...i.plan, amountTotal: i.plan.amountTotal ?? Math.round(i.amount * i.plan.total * 100) / 100 },
 });
 
 let items = load('debo:items', []).map(migrate);
@@ -170,6 +181,8 @@ for (const d of document.querySelectorAll('dialog')) {
   enableDrag(d);
   // Tocar fuera de la hoja la cierra.
   d.addEventListener('click', e => {
+    // Solo cuenta el fondo: los clics de teclado llegan con coordenadas 0,0 sobre un botón.
+    if (e.target !== d) return;
     const r = d.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeSheet(d);
   });
@@ -384,6 +397,7 @@ const ICON = {
   play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M10 11v6M14 11v6M6.5 7l1 12.5h9l1-12.5M9.5 7V4.5h5V7"/></svg>',
   restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.5-5.8L4 8.5"/><path d="M4 4v4.5h4.5"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v10.5h14V9M10 13h4"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
 };
 
@@ -428,7 +442,7 @@ function row(x, today) {
   btn.onclick = () => {
     if (li._dragged) return;
     if (li._open) return closeSwipe(li);
-    openItem(it.id);
+    openDetail(it.id);
   };
   for (const b of li.querySelectorAll('.swipe button')) b.onclick = () => { closeSwipe(li); ACTIONS[b.dataset.act](it); };
   enableSwipe(li, actions.length * 78);
@@ -598,6 +612,7 @@ function render() {
   if (settings.view === 'calendar') renderCalendar(today);
   else renderList(today);
   justAdded = null;
+  if (detailSheet.open && !detailSheet.dataset.closing) renderDetail();
 }
 
 $('#search').addEventListener('input', e => { ui.query = e.target.value.trim(); render(); });
@@ -665,11 +680,229 @@ function removeItem(it) {
 
 const ACTIONS = { pay: markPaid, pause: togglePause, delete: removeItem, restore: restoreItem };
 
+// ---------- Tipos y plantillas ----------
+
+const TYPES = {
+  sub: {
+    label: 'Suscripción', hint: 'Netflix, Spotify, gimnasio…', color: '#ef5b5b',
+    icon: '<path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5"/><path d="M20 4v4.5h-4.5"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 15.5"/><path d="M4 20v-4.5h4.5"/>',
+    title: 'Nueva suscripción', name: 'Servicio', placeholder: 'Netflix, Spotify, gimnasio…',
+    amount: 'Precio', date: 'Próximo cobro', freq: 'Se cobra cada',
+    defaults: { freq: 'monthly', remind: [1] },
+  },
+  pay: {
+    label: 'Pago o recibo', hint: 'Alquiler, luz, seguro o un pago puntual', color: '#5b8def',
+    icon: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+    title: 'Nuevo pago', name: 'Concepto', placeholder: 'Alquiler, luz, seguro del coche…',
+    amount: 'Importe', date: 'Fecha', freq: 'Repite',
+    defaults: { freq: 'monthly', remind: [1] },
+  },
+  plan: {
+    label: 'A plazos', hint: 'Préstamos y compras financiadas', color: '#8e7cf0',
+    icon: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 14h2M11 14h2M15 14h2"/><path d="M3 10h18"/>',
+    title: 'Nuevo pago a plazos', name: 'Concepto', placeholder: 'Préstamo del coche, iPhone…',
+    amount: 'Importe total', date: 'Próxima cuota', freq: 'Una cuota cada',
+    defaults: { freq: 'monthly', remind: [3], cat: 'finanzas' },
+  },
+  owed: {
+    label: 'Me deben', hint: 'Dinero que te tienen que devolver', color: '#18924b',
+    icon: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 11h6M19 8l3 3-3 3"/>',
+    title: 'Me deben', name: '¿Quién te debe?', placeholder: 'Marta, Carlos…',
+    amount: 'Cuánto', date: '¿Para cuándo?', freq: 'Repite',
+    defaults: { freq: 'once', remind: [0], cat: 'personas' },
+  },
+  cancel: {
+    label: 'Prueba gratis', hint: 'Te aviso antes de que empiecen a cobrarte', color: '#e8a200',
+    icon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+    title: 'Prueba gratis', name: 'Servicio', placeholder: 'Disney+, ChatGPT…',
+    amount: 'Precio al renovar', date: 'Se renueva el', freq: 'Luego cobra cada',
+    defaults: { freq: 'monthly', remind: [1, 3] },
+  },
+};
+const KIND = { sub: 'charge', pay: 'charge', plan: 'charge', owed: 'owed', cancel: 'cancel' };
+const POPULAR = ['Netflix', 'Spotify', 'Disney+', 'HBO Max', 'Prime Video', 'YouTube Premium', 'Apple TV+', 'iCloud+',
+  'Amazon Prime', 'ChatGPT Plus', 'Xbox Game Pass', 'PlayStation Plus', 'Google One', 'Microsoft 365', 'Audible', 'DAZN'];
+const PER = { monthly: 'mes', yearly: 'año', weekly: 'semana' };
+const REMIND_TEXT = { 0: 'el mismo día', 1: '1 día antes', 3: '3 días antes', 7: '1 semana antes', 14: '2 semanas antes', 30: '1 mes antes' };
+
+const typeOf = it => it.type ?? deriveType(it);
+const fmtInput = n => (n ? String(Math.round(n * 100) / 100).replace('.', ',') : '');
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
+function remindText(list) {
+  if (!list.length) return 'Sin avisos';
+  const parts = [...list].sort((a, b) => b - a).map(n => REMIND_TEXT[n] ?? `${n} días antes`);
+  return cap(parts.length > 1 ? `${parts.slice(0, -1).join(', ')} y ${parts.at(-1)}` : parts[0]);
+}
+
+function spentSince(it, today) {
+  const since = it.since || it.createdAt;
+  if (since > today) return 0;
+  if (it.freq === 'once') return it.payments.reduce((s, p) => s + p.amount, 0);
+  return occurrences(it, since, today).reduce((s, d) => s + priceAt(it, d) / Math.max(1, it.share || 1), 0);
+}
+
+function cancelHelpHTML(name) {
+  const brand = findBrand(name);
+  const web = brand?.u
+    ? `<a href="${brand.u}" target="_blank" rel="noopener">Web de ${esc(brand.n)} ↗</a>`
+    : `<a href="https://duckduckgo.com/?q=${encodeURIComponent(`cómo cancelar suscripción ${name}`)}" target="_blank" rel="noopener">Buscar cómo darse de baja ↗</a>`;
+  return `<p>¿Cómo darte de baja? Si la pagas desde el móvil, se gestiona en la tienda de apps.</p>
+    <div class="links">${web}<a href="${APPLE_SUBS}" target="_blank" rel="noopener">App Store ↗</a><a href="${GPLAY_SUBS}" target="_blank" rel="noopener">Google Play ↗</a></div>`;
+}
+
+// ---------- Selector de tipo ----------
+
+const pickSheet = $('#pickSheet');
+let pendingPreset = {};
+
+$('#pickList').innerHTML = Object.entries(TYPES).map(([k, T]) => `
+  <button type="button" class="pick" data-type="${k}">
+    <span class="pick-icon" style="--c:${T.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${T.icon}</svg></span>
+    <span><b>${T.label}</b><small>${T.hint}</small></span>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>
+  </button>`).join('');
+$('#pickList').onclick = e => {
+  const b = e.target.closest('.pick');
+  if (!b) return;
+  closeSheet(pickSheet);
+  openForm(b.dataset.type, null, pendingPreset);
+};
+
+const addNew = () => {
+  pendingPreset = settings.view === 'calendar' && ui.day >= todayISO() ? { date: ui.day } : {};
+  openSheet(pickSheet);
+};
+for (const b of ['#add', '#addTop', '#addEmpty']) $(b).onclick = addNew;
+
+// Atajos de teclado en escritorio: «n» añade, «/» busca.
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]') || e.target.closest('input, select, textarea')) return;
+  if (e.key === 'n') { e.preventDefault(); addNew(); }
+  if (e.key === '/') { e.preventDefault(); $('#search').focus(); }
+});
+
+// ---------- Detalle ----------
+
+const detailSheet = $('#detailSheet');
+let detailId = null;
+const detailItem = () => items.find(i => i.id === detailId);
+
+function openDetail(id) {
+  detailId = id;
+  renderDetail();
+  openSheet(detailSheet);
+  detailSheet.scrollTop = 0;
+}
+
+function renderDetail() {
+  const it = detailItem();
+  if (!it) return closeSheet(detailSheet);
+  const today = todayISO();
+  const x = info(it, today);
+  const t = typeOf(it);
+  const cur = curOf(it);
+  const owed = it.kind === 'owed';
+
+  $('#dAvatar').innerHTML = avatar(it);
+  $('#dName').textContent = it.name;
+  $('#dKind').textContent = `${TYPES[t].label} · ${CATS[it.cat || 'otros'][0]}`;
+
+  const per = it.freq === 'once' ? '' : ` <small>/${PER[it.freq]}</small>`;
+  $('#dAmount').innerHTML = `${owed ? '+' : ''}${esc(fmt(myAmount(it), cur))}${per}`;
+  $('#dAmount').classList.toggle('pos', owed);
+  $('#dAmountSub').textContent = [
+    it.share > 1 ? `Tu parte: ${fmt(it.amount, cur)} entre ${it.share}` : '',
+    x.plan ? `${x.plan.total} cuotas · total ${fmt(it.plan.amountTotal ?? it.amount * x.plan.total, cur)}` : '',
+    cur !== settings.currency ? `≈ ${fmt(toBase(myAmount(it), cur))}` : '',
+  ].filter(Boolean).join(' · ');
+
+  const status = $('#dStatus');
+  status.className = 'd-status' + (x.soon ? ' soon' : '') + (x.past ? ' past' : '');
+  if (it.archived) status.textContent = whenText(x);
+  else if (it.paused) status.textContent = 'En pausa: no cuenta en el total ni avisa';
+  else if (x.next) {
+    const what = it.kind === 'cancel' ? 'Se renueva' : owed ? 'Te paga' : x.plan ? 'Próxima cuota' : 'Próximo pago';
+    status.textContent = `${what} el ${fmtLong(x.next)} · ${when(x.days).toLowerCase()}`;
+  } else status.textContent = 'Sin pagos pendientes';
+
+  $('#dPlan').hidden = !x.plan;
+  if (x.plan) {
+    // Lo pagado sale de los pagos reales; las cuotas que ya estaban pagadas o vencieron se valoran a la cuota actual.
+    const planPayments = it.payments.filter(p => p.due >= it.plan.start);
+    const paid = planPayments.reduce((s, p) => s + p.amount, 0) + Math.max(0, x.plan.paid - planPayments.length) * myAmount(it);
+    const left = it.plan.amountTotal ? Math.max(0, it.plan.amountTotal - paid) : x.plan.left * myAmount(it);
+    $('#dPlan').innerHTML = `
+      <div class="stat"><span>Cuotas ${owed ? 'cobradas' : 'pagadas'}</span><b>${x.plan.paid} de ${x.plan.total}</b></div>
+      <div class="progress"><span style="width:${(x.plan.paid / x.plan.total) * 100}%"></span></div>
+      <div class="stat"><span>${owed ? 'Te han devuelto' : 'Pagado'}</span><b>${fmt(paid, cur)}</b></div>
+      <div class="stat"><span>${owed ? 'Te queda por cobrar' : 'Te queda'}</span><b>${fmt(left, cur)}</b></div>`;
+  }
+
+  // Acción principal según el estado.
+  const primary = $('#dPrimary');
+  primary.classList.remove('pos');
+  primary.hidden = false;
+  if (it.archived) { primary.textContent = 'Restaurar'; primary.onclick = () => restoreItem(it); }
+  else if (it.paused) { primary.textContent = 'Reanudar'; primary.onclick = () => togglePause(it); }
+  else if (t === 'cancel') { primary.textContent = 'Ya me he dado de baja'; primary.onclick = () => archiveItem(it); }
+  else if (x.next) {
+    primary.textContent = owed ? 'Marcar como cobrado' : x.plan ? 'Marcar cuota como pagada' : 'Marcar como pagado';
+    primary.classList.add('pos');
+    primary.onclick = () => markPaid(it);
+  } else primary.hidden = true;
+
+  const rows = [
+    ['Repite', x.plan ? `Una cuota cada ${PER[it.freq]}` : it.freq === 'once' ? 'Una vez' : `Cada ${PER[it.freq]}`],
+    ['Avisos', remindText(reminds(it))],
+    ['Categoría', CATS[it.cat || 'otros'][0]],
+    ['Método de pago', it.method],
+    ['Cliente desde', it.since && fmtLong(it.since)],
+    ['Llevas pagado', !owed && !x.plan && spentSince(it, today) > 0 && `${fmt(spentSince(it, today), cur)} desde ${fmtMonth(it.since || it.createdAt)}`],
+    ['Precio anterior', it.priceHistory.at(-1) && `${fmt(it.priceHistory.at(-1).amount, cur)} (hasta ${fmtMonth(it.priceHistory.at(-1).date)})`],
+    ['Nota', it.note],
+  ].filter(([, v]) => v);
+  $('#dRows').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+
+  $('#dCancel').hidden = t !== 'cancel' || !!it.archived;
+  if (t === 'cancel') $('#dCancel').innerHTML = cancelHelpHTML(it.name);
+
+  const hist = $('#dHistory');
+  hist.hidden = !it.payments.length;
+  hist.querySelector('summary').textContent = `Historial de pagos (${it.payments.length})`;
+  hist.querySelector('ul').innerHTML = [...it.payments].reverse().slice(0, 36)
+    .map(p => `<li><span>${fmtDay(p.due)} ${p.due.slice(0, 4)}</span><b>${fmt(p.amount, cur)}</b></li>`).join('');
+
+  const pause = $('#dPause');
+  pause.hidden = !!it.archived;
+  pause.innerHTML = `${it.paused ? ICON.play : ICON.pause}<span>${it.paused ? 'Reanudar' : 'Pausar'}</span>`;
+  $('#dArchive').innerHTML = `${it.archived ? ICON.restore : ICON.archive}<span>${it.archived ? 'Restaurar' : 'Archivar'}</span>`;
+  $('#dIcs').hidden = !isActive(it);
+}
+
+const editFromDetail = () => {
+  const id = detailId;
+  closeSheet(detailSheet);
+  openForm(null, id);
+};
+$('#dEdit').onclick = editFromDetail;
+$('#dEditTop').onclick = editFromDetail;
+$('#dPause').onclick = () => { const it = detailItem(); if (it) togglePause(it); };
+$('#dArchive').onclick = () => { const it = detailItem(); if (it) (it.archived ? restoreItem(it) : archiveItem(it)); };
+$('#dIcs').onclick = () => { const it = detailItem(); if (it) downloadICS([it], it.name); };
+$('#dDelete').onclick = () => {
+  const it = detailItem();
+  if (!it) return;
+  closeSheet(detailSheet);
+  removeItem(it);
+};
+
 // ---------- Formulario ----------
 
 const form = $('#itemForm');
 const sheet = $('#itemSheet');
 const F = n => form.elements.namedItem(n);
+let formType = 'sub';
 let catTouched = false;
 let autoAmount = false;
 
@@ -678,7 +911,60 @@ $('#cats').innerHTML = Object.entries(CATS)
   .join('');
 $('#brandList').replaceChildren(...BRAND_NAMES.map(n => Object.assign(document.createElement('option'), { value: n })));
 F('currency').innerHTML = CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('');
+F('type').innerHTML = Object.entries(TYPES).map(([k, T]) => `<option value="${k}">${T.label}</option>`).join('');
 $('#currency').innerHTML = CURRENCIES.map(c => `<option value="${c}">${currencyName(c)} (${c})</option>`).join('');
+
+const isPlanForm = () => formType === 'plan' || (formType === 'owed' && F('owedPlan').checked);
+
+// Logos populares para rellenar con un toque.
+function renderPicks() {
+  const current = findBrand(F('name').value)?.n;
+  $('#picks').innerHTML = POPULAR.map(findBrand).filter(Boolean).map(b =>
+    `<button type="button" data-name="${esc(b.n)}" aria-pressed="${b.n === current}">${avatar({ name: b.n })}<span>${esc(b.n)}</span></button>`).join('');
+}
+$('#picks').onclick = e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  F('name').value = b.dataset.name;
+  syncPreview();
+  F('amount').focus({ preventScroll: true });
+};
+
+// Muestra solo los campos que tienen sentido para el tipo elegido.
+function applyType() {
+  const T = TYPES[formType];
+  const plan = isPlanForm();
+  for (const el of form.querySelectorAll('[data-types]')) el.hidden = !el.dataset.types.split(' ').includes(formType);
+  $('#planBox').hidden = !plan;
+  $('#picks').hidden = !!editing || !['sub', 'cancel'].includes(formType);
+  $('#nameLabel').textContent = T.name;
+  F('name').placeholder = T.placeholder;
+  $('#amountLabel').textContent = plan ? (formType === 'owed' ? 'Total que te deben' : 'Importe total') : T.amount;
+  $('#dateLabel').textContent = plan ? (formType === 'owed' ? 'Próximo pago' : 'Próxima cuota') : T.date;
+  $('#freqLabel').textContent = plan ? 'Una cuota cada' : T.freq;
+  const allowOnce = ['pay', 'owed'].includes(formType) && !plan;
+  form.querySelector('[data-freq="once"]').hidden = !allowOnce;
+  if (!allowOnce && F('freq').value === 'once') F('freq').value = 'monthly';
+  updatePlanCalc();
+  renderCancelHelp();
+}
+
+// En los plazos se escribe el total y la app calcula la cuota.
+function updatePlanCalc() {
+  if (!isPlanForm()) return;
+  const n = parseInt(F('planTotal').value, 10) || 0;
+  const total = parseAmount(F('amount').value);
+  $('#planCalc').innerHTML = n > 0 && total > 0
+    ? `${n} cuotas de <b>${esc(fmt(total / n, F('currency').value))}</b> cada ${PER[F('freq').value] ?? 'mes'}`
+    : 'Escribe el total y el número de cuotas: la cuota la calculo yo.';
+}
+
+function renderCancelHelp() {
+  const box = $('#cancelHelp');
+  const name = F('name').value.trim();
+  box.hidden = formType !== 'cancel' || !name;
+  if (!box.hidden) box.innerHTML = cancelHelpHTML(name);
+}
 
 // Al escribir el nombre: logo, categoría y precio orientativo si se reconoce la marca.
 function syncPreview() {
@@ -687,9 +973,9 @@ function syncPreview() {
     F('cat').value = brand.c;
     showCat();
   }
-  if (!editing && (autoAmount || !F('amount').value)) {
+  if (!editing && !isPlanForm() && formType !== 'owed' && (autoAmount || !F('amount').value)) {
     if (brand?.pr) {
-      F('amount').value = String(brand.pr).replace('.', ',');
+      F('amount').value = fmtInput(brand.pr);
       F('freq').value = brand.fq;
       autoAmount = true;
     } else if (autoAmount) {
@@ -698,12 +984,17 @@ function syncPreview() {
     }
   }
   $('#suggest').hidden = !autoAmount;
-  if (autoAmount) $('#suggest').textContent = `Precio orientativo de ${brand.n}. Cámbialo si no coincide con el tuyo.`;
-  $('#itemAvatar').innerHTML = avatar({ name: F('name').value, cat: F('cat').value });
+  if (autoAmount) $('#suggest').textContent = `Precio orientativo de ${brand.n}. Cámbialo si el tuyo es distinto.`;
+  const T = TYPES[formType];
+  $('#itemAvatar').innerHTML = F('name').value.trim() || catTouched
+    ? avatar({ name: F('name').value, cat: F('cat').value })
+    : `<span class="av type-av" style="--c:${T.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${T.icon}</svg></span>`;
+  for (const b of $('#picks').children) b.setAttribute('aria-pressed', b.dataset.name === brand?.n);
   renderCancelHelp();
 }
 F('name').addEventListener('input', syncPreview);
-F('amount').addEventListener('input', () => { autoAmount = false; $('#suggest').hidden = true; });
+F('amount').addEventListener('input', () => { autoAmount = false; $('#suggest').hidden = true; updatePlanCalc(); });
+F('planTotal').addEventListener('input', updatePlanCalc);
 
 // Centra la categoría elegida en la fila desplazable.
 function showCat() {
@@ -714,104 +1005,47 @@ function showCat() {
   rowEl.scrollLeft += offset - (rowEl.clientWidth - chip.offsetWidth) / 2;
 }
 
-function syncLabels() {
-  const kind = F('kind').value;
-  const plan = F('hasPlan').checked;
-  $('#dateLabel').textContent = kind === 'cancel' ? 'Se renueva el' : kind === 'owed' ? 'Fecha de cobro' : plan ? 'Próxima cuota' : 'Próximo pago';
-  $('#amountLabel').textContent = plan ? 'Cuota' : 'Importe';
-  $('#planFields').hidden = !plan;
-}
-
-function renderCancelHelp() {
-  const box = $('#cancelHelp');
-  const name = F('name').value.trim();
-  if (F('kind').value !== 'cancel' || !name) { box.hidden = true; return; }
-  const brand = findBrand(name);
-  const web = brand?.u
-    ? `<a href="${brand.u}" target="_blank" rel="noopener">Web de ${esc(brand.n)} ↗</a>`
-    : `<a href="https://duckduckgo.com/?q=${encodeURIComponent(`cómo cancelar suscripción ${name}`)}" target="_blank" rel="noopener">Buscar cómo darse de baja ↗</a>`;
-  box.innerHTML = `<p>¿Cómo darte de baja? Si la pagas desde el móvil, se gestiona en la tienda de apps.</p>
-    <div class="links">${web}<a href="${APPLE_SUBS}" target="_blank" rel="noopener">App Store ↗</a><a href="${GPLAY_SUBS}" target="_blank" rel="noopener">Google Play ↗</a></div>`;
-  box.hidden = false;
-}
-
-function renderStats(it) {
-  const box = $('#stats');
-  if (!it) { box.hidden = true; return; }
-  const today = todayISO();
-  const cur = curOf(it);
-  const lines = [];
-  const plan = planInfo(it, today);
-  if (plan) {
-    lines.push(`<div class="stat"><span>Cuotas pagadas</span><b>${plan.paid} de ${plan.total}</b></div>`);
-    lines.push(`<div class="progress"><span style="width:${(plan.paid / plan.total) * 100}%"></span></div>`);
-    lines.push(`<div class="stat"><span>Queda por ${it.kind === 'owed' ? 'cobrar' : 'pagar'}</span><b>${fmt(plan.left * myAmount(it), cur)}</b></div>`);
-  }
-  const since = it.since || it.createdAt;
-  if (it.kind !== 'owed' && !plan && since <= today) {
-    const spent = it.freq === 'once'
-      ? it.payments.reduce((s, p) => s + p.amount, 0)
-      : occurrences(it, since, today).reduce((s, d) => s + priceAt(it, d) / Math.max(1, it.share || 1), 0);
-    if (spent > 0) lines.push(`<div class="stat"><span>Llevas pagado desde ${fmtMonth(since)}</span><b>${fmt(spent, cur)}</b></div>`);
-  }
-  const last = it.priceHistory.at(-1);
-  if (last) lines.push(`<div class="stat"><span>Cambio de precio (${fmtMonth(last.date)})</span><b>${fmt(last.amount, cur)} → ${fmt(it.amount, cur)}</b></div>`);
-  if (it.payments.length) {
-    const list = [...it.payments].reverse().slice(0, 24)
-      .map(p => `<li><span>${fmtDay(p.due)} ${p.due.slice(0, 4)}</span><b>${fmt(p.amount, cur)}</b></li>`).join('');
-    lines.push(`<details><summary>Historial de pagos (${it.payments.length})</summary><ul>${list}</ul></details>`);
-  }
-  box.innerHTML = lines.join('');
-  box.hidden = !lines.length;
-}
-
-function openItem(id, preset = {}) {
+function openForm(type, id = null, preset = {}) {
   editing = id ? items.find(i => i.id === id) : null;
-  const it = editing ?? { kind: 'charge', freq: 'monthly', remind: [1], payments: [], priceHistory: [], ...preset };
+  formType = editing ? typeOf(editing) : type;
+  const T = TYPES[formType];
   const today = todayISO();
-  catTouched = !!it.cat;
+  const it = editing ?? { ...T.defaults, payments: [], priceHistory: [], ...preset };
+  catTouched = !!editing && !!it.cat;
   autoAmount = false;
-  shownDate = editing ? (nextDue(editing, today) ?? editing.date) : (preset.date ?? today);
+  shownDate = editing
+    ? (nextDue(editing, today) ?? editing.date)
+    : (preset.date ?? (formType === 'cancel' ? addDays(today, 7) : today));
 
   form.reset();
-  $('#itemTitle').textContent = editing ? editing.name : 'Nuevo';
+  $('#itemTitle').textContent = editing ? `Editar ${editing.name}` : T.title;
+  F('type').value = formType;
+  $('#typeField').hidden = !editing;
   F('name').value = it.name ?? '';
-  F('amount').value = it.amount ? String(it.amount).replace('.', ',') : '';
+  F('owedPlan').checked = formType === 'owed' && !!it.plan;
+  F('amount').value = it.plan ? fmtInput(it.plan.amountTotal ?? it.amount * it.plan.total) : fmtInput(it.amount);
   F('currency').value = curOf(it);
   F('date').value = shownDate;
-  F('kind').value = it.kind;
   F('freq').value = it.freq;
   for (const c of form.querySelectorAll('input[name="remind"]')) c.checked = reminds(it).includes(+c.value);
   F('cat').value = it.cat ?? 'otros';
-  F('hasPlan').checked = !!it.plan;
   F('planTotal').value = it.plan?.total ?? '';
   F('planPaid').value = it.plan?.paid0 || '';
   F('share').value = it.share > 1 ? it.share : '';
   F('since').value = it.since ?? '';
   F('method').value = it.method ?? '';
   F('note').value = it.note ?? '';
-  $('#more').open = !!(it.plan || it.share > 1 || it.since || it.method || it.note);
+  $('#more').open = !!editing && !!(it.share > 1 || it.since || it.method || it.note);
   $('#methodList').replaceChildren(...[...new Set(items.map(i => i.method).filter(Boolean))]
     .map(m => Object.assign(document.createElement('option'), { value: m })));
 
-  const active = editing && isActive(editing);
-  $('#itemActions').classList.toggle('is-new', !editing);
-  $('#cancelBtn').hidden = !!editing;
-  $('#payBtn').hidden = !(active && nextDue(editing, today));
-  $('#payBtn').textContent = it.kind === 'owed' ? 'Marcar cobrado' : 'Marcar pagado';
-  $('#pauseBtn').hidden = !editing || !!editing.archived;
-  $('#pauseBtn').textContent = editing?.paused ? 'Reanudar' : 'Pausar';
-  $('#archiveBtn').hidden = !editing;
-  $('#archiveBtn').textContent = editing?.archived ? 'Restaurar' : it.kind === 'cancel' ? 'Ya me di de baja' : 'Archivar';
-  $('#ics').hidden = !active;
-  $('#del').hidden = !editing;
-
-  renderStats(editing);
-  syncLabels();
+  renderPicks();
+  applyType();
   syncPreview();
   openSheet(sheet);
   sheet.scrollTop = 0;
-  if (editing) showCat();
+  $('#picks').scrollLeft = 0;
+  if (editing || it.cat) showCat();
   else $('#cats').scrollLeft = 0;
   // En móvil no se abre el teclado solo: tapaba media hoja.
   if (!editing && matchMedia('(hover: hover)').matches) F('name').focus();
@@ -819,11 +1053,9 @@ function openItem(id, preset = {}) {
 
 form.addEventListener('change', e => {
   const n = e.target.name;
-  if (n === 'kind' || n === 'hasPlan') { syncLabels(); renderCancelHelp(); }
-  if (n === 'hasPlan' && e.target.checked) {
-    if (F('freq').value === 'once') F('freq').value = 'monthly';
-    F('planTotal').focus();
-  }
+  if (n === 'type') { formType = e.target.value; applyType(); }
+  if (n === 'owedPlan') { applyType(); if (e.target.checked) F('planTotal').focus(); }
+  if (n === 'freq' || n === 'currency') updatePlanCalc();
   if (n === 'cat') { catTouched = true; syncPreview(); }
 });
 
@@ -833,36 +1065,43 @@ form.addEventListener('submit', e => {
   if (!name) return F('name').focus();
   const date = F('date').value;
   if (!date) return F('date').focus();
-  const hasPlan = F('hasPlan').checked;
-  const planTotal = parseInt(F('planTotal').value, 10) || 0;
-  if (hasPlan && planTotal < 1) {
-    $('#more').open = true;
-    toast('Indica el número de cuotas');
+  const plan = isPlanForm();
+  const cuotas = parseInt(F('planTotal').value, 10) || 0;
+  if (plan && cuotas < 1) {
+    toast('Indica en cuántas cuotas se paga');
     return F('planTotal').focus();
   }
   const today = todayISO();
-  const amount = parseAmount(F('amount').value);
+  const t = formType;
+  const entered = parseAmount(F('amount').value);
+  const amount = plan ? Math.round((entered / cuotas) * 100) / 100 : entered;
   const currency = F('currency').value;
   const data = {
-    name, amount,
+    type: t, name, amount,
     currency: currency === settings.currency ? undefined : currency,
-    kind: F('kind').value,
-    freq: hasPlan && F('freq').value === 'once' ? 'monthly' : F('freq').value,
+    kind: KIND[t],
+    freq: F('freq').value || 'monthly',
     remind: [...form.querySelectorAll('input[name="remind"]:checked')].map(c => +c.value),
     cat: F('cat').value || 'otros',
-    share: Math.max(1, Math.min(50, parseInt(F('share').value, 10) || 1)),
-    since: F('since').value || undefined,
-    method: F('method').value.trim() || undefined,
+    share: ['sub', 'pay'].includes(t) ? Math.max(1, Math.min(50, parseInt(F('share').value, 10) || 1)) : 1,
+    since: ['sub', 'pay', 'cancel'].includes(t) ? F('since').value || undefined : undefined,
+    method: t !== 'owed' ? F('method').value.trim() || undefined : undefined,
     note: F('note').value.trim(),
   };
   // Solo se toca la fecha original si el usuario la cambia, así se conserva el día de anclaje (p. ej. el 31).
   if (!editing || date !== shownDate) data.date = date;
-  data.plan = hasPlan
-    ? { total: planTotal, paid0: Math.max(0, Math.min(planTotal, parseInt(F('planPaid').value, 10) || 0)), start: editing?.plan?.start ?? date }
+  data.plan = plan
+    ? {
+      total: cuotas,
+      paid0: Math.max(0, Math.min(cuotas, parseInt(F('planPaid').value, 10) || 0)),
+      start: editing?.plan?.start ?? date,
+      amountTotal: entered,
+    }
     : undefined;
 
+  const wasEditing = editing;
   if (editing) {
-    if (editing.amount && amount !== editing.amount) editing.priceHistory = [...editing.priceHistory, { date: today, amount: editing.amount }];
+    if (!plan && editing.amount && amount !== editing.amount) editing.priceHistory = [...editing.priceHistory, { date: today, amount: editing.amount }];
     Object.assign(editing, data);
   } else {
     const id = crypto.randomUUID();
@@ -873,22 +1112,8 @@ form.addEventListener('submit', e => {
   buzz();
   persist();
   ensureRates();
-});
-
-const withEditing = fn => () => { const it = editing; if (!it) return; closeSheet(sheet); fn(it); };
-$('#payBtn').onclick = withEditing(markPaid);
-$('#pauseBtn').onclick = withEditing(togglePause);
-$('#archiveBtn').onclick = withEditing(it => (it.archived ? restoreItem(it) : archiveItem(it)));
-$('#del').onclick = withEditing(removeItem);
-$('#ics').onclick = () => editing && downloadICS([editing], editing.name);
-const addNew = () => openItem(null, settings.view === 'calendar' && ui.day >= todayISO() ? { date: ui.day } : {});
-for (const b of ['#add', '#addTop', '#addEmpty']) $(b).onclick = addNew;
-
-// Atajos de teclado en escritorio: «n» añade, «/» busca.
-document.addEventListener('keydown', e => {
-  if (e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]') || e.target.closest('input, select, textarea')) return;
-  if (e.key === 'n') { e.preventDefault(); addNew(); }
-  if (e.key === '/') { e.preventDefault(); $('#search').focus(); }
+  if (wasEditing) openDetail(wasEditing.id);
+  else toast(`${name} guardado`);
 });
 
 // ---------- Calendario (.ics) ----------
