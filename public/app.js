@@ -1,4 +1,5 @@
 import { FREQ, nextDate, daysBetween, monthlyCost, todayISO, money, parseDate } from './shared.js';
+import { CATS, catIcon, avatar, findBrand, BRAND_NAMES } from './catalog.js';
 
 const $ = s => document.querySelector(s);
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -40,7 +41,7 @@ function render() {
       + (r.kind === 'cancel' ? ' cancel' : '')
       + (r.days >= 0 && r.days <= r.remind ? ' soon' : '')
       + (r.days < 0 ? ' past' : '');
-    li.innerHTML = '<button class="item-btn"><span class="dot"></span><span class="meta"><span class="name"></span><span class="when"></span></span><span class="amt"></span></button>';
+    li.innerHTML = `<button class="item-btn">${avatar(r)}<span class="meta"><span class="name"></span><span class="when"></span></span><span class="amt"></span></button>`;
     li.querySelector('.name').textContent = r.name;
     li.querySelector('.when').textContent = [
       r.kind === 'cancel' ? 'Cancelar' : null,
@@ -64,10 +65,37 @@ function persist() {
 
 const form = $('#itemForm');
 const F = n => form.elements.namedItem(n);
+let catTouched = false;
+
+$('#cats').innerHTML = Object.entries(CATS)
+  .map(([k, [label]]) => `<label><input type="radio" name="cat" value="${k}"><span>${catIcon(k)}${label}</span></label>`)
+  .join('');
+$('#brandList').replaceChildren(...BRAND_NAMES.map(n => Object.assign(document.createElement('option'), { value: n })));
+
+// Al escribir el nombre: logo en la cabecera y categoría automática si el usuario no ha elegido una.
+function syncPreview() {
+  const brand = findBrand(F('name').value);
+  if (brand && !catTouched && F('cat').value !== brand.c) {
+    F('cat').value = brand.c;
+    showCat();
+  }
+  $('#itemAvatar').innerHTML = avatar({ name: F('name').value, cat: F('cat').value });
+}
+
+// Centra la categoría elegida en la fila desplazable.
+function showCat() {
+  const row = $('#cats');
+  const chip = row.querySelector('input:checked')?.parentElement;
+  if (!chip) return;
+  const offset = chip.getBoundingClientRect().left - row.getBoundingClientRect().left;
+  row.scrollLeft += offset - (row.clientWidth - chip.offsetWidth) / 2;
+}
+F('name').addEventListener('input', syncPreview);
 
 function openItem(id) {
   editing = id ? items.find(i => i.id === id) : null;
   const it = editing ?? { kind: 'charge', freq: 'monthly', remind: 1 };
+  catTouched = !!it.cat;
   shownDate = editing ? nextDate(editing, todayISO()) : todayISO();
   form.reset();
   $('#itemTitle').textContent = editing ? editing.name : 'Nuevo';
@@ -78,17 +106,23 @@ function openItem(id) {
   F('freq').value = it.freq;
   F('remind').value = String(it.remind);
   F('note').value = it.note ?? '';
+  F('cat').value = it.cat ?? 'otros';
   $('#del').hidden = !editing;
   $('#ics').hidden = !editing;
   syncDateLabel();
+  syncPreview();
   $('#itemSheet').showModal();
+  showCat();
   if (!editing) F('name').focus();
 }
 
 function syncDateLabel() {
   $('#dateLabel').textContent = F('kind').value === 'cancel' ? 'Se renueva el' : 'Próximo cobro';
 }
-form.addEventListener('change', e => { if (e.target.name === 'kind') syncDateLabel(); });
+form.addEventListener('change', e => {
+  if (e.target.name === 'kind') syncDateLabel();
+  if (e.target.name === 'cat') { catTouched = true; syncPreview(); }
+});
 
 form.addEventListener('submit', e => {
   e.preventDefault();
@@ -102,6 +136,7 @@ form.addEventListener('submit', e => {
     kind: F('kind').value,
     freq: F('freq').value,
     remind: +F('remind').value,
+    cat: F('cat').value || 'otros',
     note: F('note').value.trim(),
   };
   // Solo se toca la fecha original si el usuario la cambia, así se conserva el día de anclaje (p. ej. el 31).

@@ -6,6 +6,7 @@
     "dev": "vercel dev",
     "preview": "npx serve public -l 5173",
     "icons": "node scripts/icons.mjs",
+    "brands": "node scripts/brands.mjs",
     "vapid": "web-push generate-vapid-keys"
   },
   "dependencies": {
@@ -14,5 +15,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "simple-icons": "^16.35.0"
   }
 }

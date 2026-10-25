@@ -6,6 +6,7 @@ PWA minimalista para apuntar suscripciones, cobros y deudas, y recibir un aviso 
 - Los datos viven en el dispositivo (`localStorage`). Copia de seguridad con exportar/importar JSON.
 - Avisos push reales (iOS 16.4+ y Android) mediante una función de Vercel + Vercel Cron + Upstash Redis.
 - Alternativa sin servidor: exportar a calendario (`.ics`) con alarma a las 9:00 del día de aviso.
+- Logos de ~70 servicios populares (Netflix, Spotify, Glovo…) detectados por el nombre, y categorías con icono (hogar, comida, transporte…).
 
 ## Estructura
 
@@ -13,6 +14,8 @@ PWA minimalista para apuntar suscripciones, cobros y deudas, y recibir un aviso 
 public/          la app (se sirve tal cual)
   app.js         interfaz y lógica del cliente
   shared.js      cálculo de fechas, compartido con el servidor
+  catalog.js     categorías, iconos y detección de marca por nombre
+  brands.js      logos de marcas (generado, no editar a mano)
   sw.js          service worker: offline + notificaciones push
 api/
   vapid.js       GET  clave pública para suscribirse a push
@@ -21,7 +24,10 @@ api/
   test.js        POST envía una notificación de prueba
 lib/server.js    Redis + web-push
 scripts/icons.mjs regenera los iconos (npm run icons)
+scripts/brands.mjs regenera brands.js (npm run brands)
 ```
+
+Para añadir una marca, añade una línea a `LIST` en `scripts/brands.mjs` y ejecuta `npm run brands`. Si Simple Icons no tiene su logo, pon un color (`'#FF9900'`) en lugar del slug y se mostrará la inicial.
 
 ## Desplegar en Vercel
 

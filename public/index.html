@@ -42,14 +42,23 @@
 
   <dialog id="itemSheet" class="sheet">
     <form id="itemForm" novalidate>
-      <h2 id="itemTitle">Nuevo</h2>
+      <div class="sheet-head">
+        <span id="itemAvatar"></span>
+        <h2 id="itemTitle">Nuevo</h2>
+      </div>
 
-      <label class="field"><span>Nombre</span><input name="name" placeholder="Netflix, alquiler, prueba de Spotify…" autocomplete="off" maxlength="80"></label>
+      <label class="field"><span>Nombre</span><input name="name" placeholder="Netflix, alquiler, prueba de Spotify…" autocomplete="off" maxlength="80" list="brandList"></label>
+      <datalist id="brandList"></datalist>
 
       <div class="row">
         <label class="field"><span>Importe</span><input name="amount" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
         <label class="field"><span id="dateLabel">Próximo cobro</span><input name="date" type="date"></label>
       </div>
+
+      <fieldset class="cats-field">
+        <legend>Categoría</legend>
+        <div class="cats" id="cats"></div>
+      </fieldset>
 
       <fieldset class="seg">
         <legend>Tipo</legend>
