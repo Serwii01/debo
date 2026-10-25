@@ -6,6 +6,7 @@ PWA minimalista para apuntar suscripciones, cobros y deudas, y recibir un aviso 
 - Los datos viven en el dispositivo (`localStorage`). Copia de seguridad con exportar/importar JSON.
 - Avisos push reales (iOS 16.4+ y Android) mediante una función de Vercel + Vercel Cron + Upstash Redis.
 - Alternativa sin servidor: exportar a calendario (`.ics`) con alarma a las 9:00 del día de aviso.
+- Responsive (móvil, tablet y escritorio con dos columnas), modo claro/oscuro/automático con transición animada, hojas que se cierran arrastrando y deshacer al eliminar.
 - Logos de ~70 servicios populares (Netflix, Spotify, Glovo…) detectados por el nombre, y categorías con icono (hogar, comida, transporte…).
 
 ## Estructura

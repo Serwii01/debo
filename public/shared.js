@@ -44,6 +44,6 @@ export function reminderText(item, days, currency) {
   const when = days === 0 ? 'hoy' : days === 1 ? 'mañana' : `en ${days} días`;
   const amt = money(item.amount, currency);
   return item.kind === 'cancel'
-    ? { title: `Cancela ${item.name}`, body: `Se renueva ${when} por ${amt}` }
+    ? { title: `Date de baja de ${item.name}`, body: `Se renueva ${when} por ${amt}` }
     : { title: item.name, body: `Cobro de ${amt} ${when}` };
 }
