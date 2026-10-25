@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Debo</title>
+  <meta name="description" content="Suscripciones, cobros y recordatorios para cancelar.">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Debo">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <h1>Debo</h1>
+      <button class="icon" id="openSettings" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+    </header>
+
+    <section class="summary">
+      <p class="label">Gasto al mes</p>
+      <p class="total" id="total">0,00 €</p>
+      <p class="sub" id="next"></p>
+    </section>
+
+    <ul class="list" id="list"></ul>
+    <p class="empty" id="empty" hidden>Nada por aquí.<br>Añade tu primera suscripción con +</p>
+  </main>
+
+  <button class="fab" id="add" aria-label="Añadir">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <dialog id="itemSheet" class="sheet">
+    <form id="itemForm" novalidate>
+      <h2 id="itemTitle">Nuevo</h2>
+
+      <label class="field"><span>Nombre</span><input name="name" placeholder="Netflix, alquiler, prueba de Spotify…" autocomplete="off" maxlength="80"></label>
+
+      <div class="row">
+        <label class="field"><span>Importe</span><input name="amount" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+        <label class="field"><span id="dateLabel">Próximo cobro</span><input name="date" type="date"></label>
+      </div>
+
+      <fieldset class="seg">
+        <legend>Tipo</legend>
+        <label><input type="radio" name="kind" value="charge"><span>Cobro</span></label>
+        <label><input type="radio" name="kind" value="cancel"><span>Cancelar</span></label>
+      </fieldset>
+
+      <fieldset class="seg">
+        <legend>Repite</legend>
+        <label><input type="radio" name="freq" value="monthly"><span>Mes</span></label>
+        <label><input type="radio" name="freq" value="yearly"><span>Año</span></label>
+        <label><input type="radio" name="freq" value="weekly"><span>Semana</span></label>
+        <label><input type="radio" name="freq" value="once"><span>Una vez</span></label>
+      </fieldset>
+
+      <label class="field"><span>Avisar</span>
+        <select name="remind">
+          <option value="0">El mismo día</option>
+          <option value="1">1 día antes</option>
+          <option value="2">2 días antes</option>
+          <option value="3">3 días antes</option>
+          <option value="7">1 semana antes</option>
+          <option value="14">2 semanas antes</option>
+          <option value="30">1 mes antes</option>
+        </select>
+      </label>
+
+      <label class="field"><span>Nota</span><input name="note" placeholder="Opcional" autocomplete="off" maxlength="200"></label>
+
+      <div class="actions">
+        <button type="button" class="ghost danger" id="del">Eliminar</button>
+        <button type="button" class="ghost" id="ics">Al calendario</button>
+        <button type="submit" class="primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsSheet" class="sheet">
+    <div class="settings">
+      <h2>Ajustes</h2>
+
+      <section>
+        <h3>Avisos</h3>
+        <p class="hint" id="pushStatus"></p>
+        <div class="actions left">
+          <button type="button" class="primary" id="pushToggle">Activar avisos</button>
+          <button type="button" class="ghost" id="pushTest" hidden>Probar</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Moneda</h3>
+        <select id="currency">
+          <option value="EUR">Euro (€)</option>
+          <option value="USD">Dólar ($)</option>
+          <option value="GBP">Libra (£)</option>
+          <option value="MXN">Peso mexicano</option>
+          <option value="ARS">Peso argentino</option>
+          <option value="COP">Peso colombiano</option>
+          <option value="CLP">Peso chileno</option>
+        </select>
+      </section>
+
+      <section>
+        <h3>Datos</h3>
+        <div class="actions left">
+          <button type="button" class="ghost" id="icsAll">Todo al calendario</button>
+          <button type="button" class="ghost" id="exportJson">Exportar copia</button>
+          <label class="ghost button">Importar<input type="file" id="importJson" accept="application/json,.json" hidden></label>
+        </div>
+        <p class="hint">Tus datos viven en este dispositivo. Solo se envían al servidor si activas los avisos.</p>
+      </section>
+    </div>
+  </dialog>
+</body>
+</html>
