@@ -1,7 +1,7 @@
 {
   "name": "Debo",
   "short_name": "Debo",
-  "description": "Suscripciones, cobros y recordatorios para cancelar.",
+  "description": "Suscripciones, pagos, deudas y recordatorios para darte de baja a tiempo.",
   "lang": "es",
   "id": "/",
   "start_url": "/",
@@ -14,5 +14,21 @@
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Añadir",
+      "short_name": "Añadir",
+      "description": "Apuntar una suscripción, pago o deuda",
+      "url": "/?action=add",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Calendario",
+      "short_name": "Calendario",
+      "description": "Ver los pagos del mes",
+      "url": "/?view=calendar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

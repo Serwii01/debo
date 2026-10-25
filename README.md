@@ -7,7 +7,14 @@ PWA minimalista para apuntar suscripciones, cobros y deudas, y recibir un aviso 
 - Avisos push reales (iOS 16.4+ y Android) mediante una función de Vercel + Vercel Cron + Upstash Redis.
 - Alternativa sin servidor: exportar a calendario (`.ics`) con alarma a las 9:00 del día de aviso.
 - Responsive (móvil, tablet y escritorio con dos columnas), modo claro/oscuro/automático con transición animada, hojas que se cierran arrastrando y deshacer al eliminar.
-- Logos de ~70 servicios populares (Netflix, Spotify, Glovo…) detectados por el nombre, y categorías con icono (hogar, comida, transporte…).
+- Logos de ~250 servicios (Netflix, Spotify, Glovo, bancos, telefonía…) detectados por el nombre, con precio orientativo y enlace para darse de baja en los principales.
+- Pagos, «Dar de baja» y «Me deben»; pagos a plazos con cuotas y progreso; gastos compartidos; varios avisos por elemento.
+- Marcar como pagado con historial, pausar, archivar (con lo que te ahorras al darte de baja) y deslizar para acciones rápidas.
+- Resumen con presupuesto mensual, gasto por categoría, subidas de precio y lo gastado desde que eres cliente.
+- Vista de calendario, buscador, filtros y orden por fecha, importe o nombre.
+- Moneda por elemento con conversión diaria ([ExchangeRate-API](https://www.exchangerate-api.com), sin clave).
+- Sincronización entre dispositivos con un código; los datos se cifran (AES-GCM) en el dispositivo antes de subirlos.
+- Color de acento, contador animado, vibración en Android y accesos directos en el icono de la app.
 
 ## Estructura
 
@@ -17,10 +24,12 @@ public/          la app (se sirve tal cual)
   shared.js      cálculo de fechas, compartido con el servidor
   catalog.js     categorías, iconos y detección de marca por nombre
   brands.js      logos de marcas (generado, no editar a mano)
+  vault.js       cifrado y sincronización entre dispositivos
   sw.js          service worker: offline + notificaciones push
 api/
   vapid.js       GET  clave pública para suscribirse a push
-  sync.js        POST guarda la lista del dispositivo · DELETE la borra
+  sync.js        POST guarda lo necesario para avisar · DELETE lo borra
+  vault.js       GET/PUT copia cifrada para sincronizar dispositivos
   cron.js        lo ejecuta Vercel cada día a las 07:00 UTC y envía los avisos
   test.js        POST envía una notificación de prueba
 lib/server.js    Redis + web-push

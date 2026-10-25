@@ -1,5 +1,5 @@
 import { db, sendPush } from '../lib/server.js';
-import { nextDate, daysBetween, todayISO, reminderText } from '../public/shared.js';
+import { nextDue, daysBetween, todayISO, reminderText, reminds } from '../public/shared.js';
 
 // Lo ejecuta Vercel Cron una vez al día (ver vercel.json).
 export default async function handler(req, res) {
@@ -16,12 +16,17 @@ export default async function handler(req, res) {
     if (!user) { await r.srem('users', key); continue; }
 
     const today = todayISO(user.tz);
-    const due = user.items.filter(i => daysBetween(today, nextDate(i, today)) === i.remind);
+    const due = user.items.flatMap(item => {
+      const next = nextDue(item, today);
+      if (!next || (item.until && next > item.until)) return [];
+      const days = daysBetween(today, next);
+      return reminds(item).includes(days) ? [{ item, days }] : [];
+    });
 
-    for (const item of due) {
+    for (const { item, days } of due) {
       try {
         await sendPush(user.subscription, {
-          ...reminderText(item, item.remind, user.currency),
+          ...reminderText(item, days, user.currency),
           tag: `${item.name}-${today}`,
         });
         sent++;

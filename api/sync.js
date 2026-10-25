@@ -1,6 +1,9 @@
 import { db, keyFor, validSub, readBody } from '../lib/server.js';
 
 const FREQS = new Set(['monthly', 'yearly', 'weekly', 'once']);
+const KINDS = new Set(['charge', 'cancel', 'owed']);
+const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const isCurrency = s => typeof s === 'string' && /^[A-Z]{3}$/.test(s);
 
 function validTz(tz) {
   try { new Intl.DateTimeFormat('en', { timeZone: tz }); return tz; } catch { return 'Europe/Madrid'; }
@@ -21,20 +24,27 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const { subscription, items, currency, tz } = body;
-  if (!validSub(subscription) || !Array.isArray(items) || items.length > 300) {
+  if (!validSub(subscription) || !Array.isArray(items) || items.length > 500) {
     return res.status(400).json({ error: 'Datos no válidos' });
   }
 
   // Solo se guarda lo necesario para avisar.
   const clean = items
-    .filter(i => i && typeof i.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i.date) && FREQS.has(i.freq))
+    .filter(i => i && isDate(i.date) && FREQS.has(i.freq))
     .map(i => ({
       name: String(i.name ?? '').slice(0, 80),
       amount: Number(i.amount) || 0,
+      share: Math.max(1, Math.min(50, Math.round(Number(i.share) || 1))),
+      currency: isCurrency(i.currency) ? i.currency : undefined,
       date: i.date,
       freq: i.freq,
-      kind: i.kind === 'cancel' ? 'cancel' : 'charge',
-      remind: Math.max(0, Math.min(60, Math.round(Number(i.remind) || 0))),
+      kind: KINDS.has(i.kind) ? i.kind : 'charge',
+      remind: (Array.isArray(i.remind) ? i.remind : [i.remind])
+        .map(n => Math.round(Number(n)))
+        .filter(n => n >= 0 && n <= 60)
+        .slice(0, 8),
+      paidUntil: isDate(i.paidUntil) ? i.paidUntil : null,
+      until: isDate(i.until) ? i.until : null,
     }));
 
   const key = keyFor(subscription.endpoint);
@@ -42,7 +52,7 @@ export default async function handler(req, res) {
     db().set(key, {
       subscription: { endpoint: subscription.endpoint, keys: subscription.keys },
       items: clean,
-      currency: /^[A-Z]{3}$/.test(currency) ? currency : 'EUR',
+      currency: isCurrency(currency) ? currency : 'EUR',
       tz: validTz(tz),
     }),
     db().sadd('users', key),
